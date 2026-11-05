@@ -105,18 +105,18 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "capnp"
-version = "0.26.2"
+version = "0.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58ddce707ad9fb2ae92770523cd0e17a0cf34e79b66a9ca4db2dd993535fe718"
+checksum = "98216f4102645406ce4dbb0d2b3511cae502537885bae5662812ccc1fe6b04e7"
 dependencies = [
  "embedded-io",
 ]
 
 [[package]]
 name = "capnpc"
-version = "0.26.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13aea06b902f885cb0313b11e900e96cd57fef775e9e601a96e14e1d655f3cd3"
+checksum = "82ca16312ddb64529d31c8dc46148671c22e57b80134fa5f17811ad5a6a79492"
 dependencies = [
  "capnp",
 ]
@@ -1431,8 +1431,8 @@ dependencies = [
 
 [[package]]
 name = "zpr"
-version = "0.30.2"
-source = "git+https://github.com/org-zpr/zl-zpr-common.git?tag=v0.30.2#a0a0bea5b61a0786c29265f3ead99155b5eee292"
+version = "0.31.0"
+source = "git+https://github.com/org-zpr/zl-zpr-common.git?tag=zl-v0.31.0#cce4caf03ba1157eebac91e18a11b77c3127390a"
 dependencies = [
  "base64",
  "bytes",
