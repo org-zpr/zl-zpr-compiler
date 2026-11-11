@@ -366,15 +366,25 @@ impl ConfigParse {
             )?;
 
             if let Some(addr_val) = v.get("substrate_addrs") {
-                if let Some(tbl) = addr_val.as_table() {
-                    let substrate_addrs = parse_substrate_addrs(node_id, tbl, ctx)?;
-                    if !substrate_addrs.is_empty() {
-                        n.substrate_addrs = Some(substrate_addrs);
-                    } else {
-                        ctx.warn(
-                            format!("node {} has empty substrate_addrs section", node_id).as_str(),
-                        )?;
-                    }
+                // A node without substrate addresses reports its own (zl-zipline#226), so a
+                // malformed section must fail rather than be ignored: ignoring it would
+                // silently drop the configured address.
+                let tbl = addr_val.as_table().ok_or(err_config!(
+                    "node {} substrate_addrs must be a table of interface = \"HOST:PORT\"",
+                    node_id
+                ))?;
+                let substrate_addrs = parse_substrate_addrs(node_id, tbl, ctx)?;
+                if !substrate_addrs.is_empty() {
+                    n.substrate_addrs = Some(substrate_addrs);
+                } else {
+                    ctx.warn(
+                        format!(
+                            "node {} has empty substrate_addrs section; treated as no substrate \
+                             address (the node reports its own)",
+                            node_id
+                        )
+                        .as_str(),
+                    )?;
                 }
             }
 
@@ -1162,6 +1172,24 @@ mod test {
             .unwrap_err()
             .to_string();
         assert!(err.contains("empty interface"), "unexpected error: {err}");
+    }
+
+    #[test]
+    /// A `substrate_addrs` that is not a table is an error. Ignoring it would silently turn
+    /// the node into one that reports its own address (zl-zipline#226).
+    fn test_parse_node_substrate_addrs_not_table() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        substrate_addrs = "10.0.0.1:5000"
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let err = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("substrate_addrs"), "unexpected error: {err}");
     }
 
     #[test]
