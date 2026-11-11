@@ -1874,3 +1874,55 @@ fn test_link_interface_on_node_without_substrate_is_rejected() {
         "unexpected error: {msg}"
     );
 }
+
+// ---- zl-zipline#226: transit-capable nodes ----
+
+/// Decode `Policy.transitNodes` of a compiled policy. `None` when the field is unset.
+fn transit_nodes(pbytes: &[u8]) -> Option<Vec<String>> {
+    let rdr = capnp::serialize::read_message(
+        &mut Cursor::new(pbytes),
+        capnp::message::ReaderOptions::new(),
+    )
+    .expect("decode policy");
+    let policy = rdr
+        .get_root::<policy_capnp::policy::Reader>()
+        .expect("policy root");
+    if !policy.has_transit_nodes() {
+        return None;
+    }
+    Some(
+        policy
+            .get_transit_nodes()
+            .unwrap()
+            .iter()
+            .map(|t| t.unwrap().to_str().unwrap().to_string())
+            .collect(),
+    )
+}
+
+#[test]
+/// `transit = true` on a node lists its ZPR address in `Policy.transitNodes`.
+fn test_transit_node_emitted() {
+    let temp = TempDir::new("topo-transit");
+    let pbytes = compile_policy_bytes("test-topo-transit", &temp);
+    assert_eq!(
+        transit_nodes(&pbytes),
+        Some(vec!["fd5a:5052:90de::1".to_string()])
+    );
+}
+
+#[test]
+/// With no transit node configured, `Policy.transitNodes` stays unset (fail closed).
+fn test_no_transit_nodes_leaves_field_unset() {
+    let temp = TempDir::new("topo-no-transit");
+    let pbytes = compile_policy_bytes("test-topo", &temp);
+    assert_eq!(transit_nodes(&pbytes), None);
+}
+
+#[test]
+/// A non-boolean `transit` value is a configuration error.
+fn test_transit_must_be_boolean() {
+    let temp = TempDir::new("bad-transit-not-bool");
+    let msg = compile_expect_err("bad-node-transit-not-bool", &temp);
+    assert!(msg.contains("transit"), "unexpected error: {msg}");
+}

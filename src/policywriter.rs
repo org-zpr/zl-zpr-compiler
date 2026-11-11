@@ -67,6 +67,10 @@ pub trait PolicyWriter {
         link_attrs: &[Attribute],
     );
 
+    /// Emit the ZPR addresses of the transit-capable nodes (`Policy.transitNodes`). An empty
+    /// slice leaves the field unset: no node is transit-capable (zl-zipline#226).
+    fn write_transit_nodes(&mut self, transit_nodes: &[IpAddr]);
+
     fn finalize(self) -> Result<Vec<u8>, CompilationError>;
 }
 

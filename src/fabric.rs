@@ -56,6 +56,8 @@ pub struct FabricNode {
     pub zpr_addr: IpAddr,
     pub provider_attrs: Vec<Attribute>, // parsed out of config::Node.provider
     pub substrate_addrs: Option<HashMap<String, SubstrateAddr>>, // substrate addrs parsed out of config::Node.substrate
+    /// May carry traffic between other nodes (`transit = true` in the configuration).
+    pub transit: bool,
 }
 
 #[derive(Debug, Clone)]

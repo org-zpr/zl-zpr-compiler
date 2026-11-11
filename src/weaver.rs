@@ -643,6 +643,12 @@ impl Weaver {
             _ => (),
         };
 
+        // Nodes marked `transit = true` (zl-zipline#226).
+        let transit_node_keys = match config.get("zpr/transit_nodes") {
+            Some(ConfigItem::KeySet(ids)) => ids,
+            _ => Vec::new(),
+        };
+
         for node_key in &node_keys {
             let raw_node_attrs = match config.get(&format!("zpr/nodes/{node_key}/provider")) {
                 Some(ConfigItem::AttrList(attrs)) => vec_to_attributes(&attrs)?,
@@ -716,6 +722,7 @@ impl Weaver {
                 zpr_addr: naddr.into(),
                 provider_attrs: provider_attrs.clone(),
                 substrate_addrs: substrates,
+                transit: transit_node_keys.contains(node_key),
             };
 
             self.fabric.push_node(fabn);

@@ -28,6 +28,8 @@ pub struct PolicyBinaryV2 {
     join_policies: JPBuilder,
     topology: Vec<Peering>,
     trusted_services: Vec<TrustedService>,
+    /// `Policy.transitNodes`: ZPR addresses (text) of transit-capable nodes.
+    transit_nodes: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -375,6 +377,11 @@ impl PolicyWriter for PolicyBinaryV2 {
         self.trusted_services.push(ts);
     }
 
+    fn write_transit_nodes(&mut self, transit_nodes: &[IpAddr]) {
+        // Same identifier convention as Peering.nodeA: the node's ZPR address as text.
+        self.transit_nodes = transit_nodes.iter().map(|a| a.to_string()).collect();
+    }
+
     fn print_stats(&self) {
         println!(
             "  {} communication policies",
@@ -496,6 +503,16 @@ impl PolicyWriter for PolicyBinaryV2 {
             for (i, peering) in self.topology.iter().enumerate() {
                 let mut p_builder = topl.reborrow().get(i as u32);
                 peering.write_to(&mut p_builder);
+            }
+        }
+
+        // Unset when empty: no node is transit-capable (fail closed).
+        if !self.transit_nodes.is_empty() {
+            let mut tl = policy
+                .reborrow()
+                .init_transit_nodes(self.transit_nodes.len() as u32);
+            for (i, addr) in self.transit_nodes.iter().enumerate() {
+                tl.set(i as u32, addr.as_str());
             }
         }
 

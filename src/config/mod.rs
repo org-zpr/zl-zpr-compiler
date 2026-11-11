@@ -108,6 +108,9 @@ pub struct Node {
     pub provider: Vec<(String, String)>,
     pub zpr_address: IpAddr,
     pub substrate_addrs: Option<HashMap<String, Interface>>,
+    /// `transit = true`: the node may carry traffic between other nodes. Defaults to false;
+    /// policy fails closed for nodes not marked (zl-zipline#226).
+    pub transit: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1102,6 +1105,44 @@ mod test {
             err.contains("interface 'i0'") && err.contains("'n1'"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    /// `transit` is an optional boolean on a node; absent means false (zl-zipline#226).
+    fn test_parse_node_transit() {
+        let tstr = r#"
+        [nodes.relay]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        transit = true
+
+        [nodes.laptop]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["zpr.foo", "baz"]]
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let nodes = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap();
+        assert!(nodes.get("relay").unwrap().transit);
+        assert!(!nodes.get("laptop").unwrap().transit);
+    }
+
+    #[test]
+    /// A non-boolean `transit` is an error.
+    fn test_parse_node_transit_not_bool() {
+        let tstr = r#"
+        [nodes.relay]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        transit = "yes"
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let err = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("transit"), "unexpected error: {err}");
     }
 
     #[test]

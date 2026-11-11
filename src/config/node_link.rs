@@ -24,6 +24,7 @@ fn warn_unknown_node_property(node: &Table, ctx: &CompilationCtx) -> Result<(), 
             "provider" => (),
             "zpr_address" => (),
             "substrate_addrs" => (),
+            "transit" => (),
             _ => ctx.warn(&format!(
                 "unknown property '{elem}' detected while parsing node",
             ))?,
@@ -79,11 +80,21 @@ pub(super) fn parse_node(
 
     let provider = parse_provider(&format!("node {}", node_id), node)?;
 
+    // Optional; absent means the node is not transit-capable (fail closed).
+    let transit = match node.get("transit") {
+        None => false,
+        Some(v) => v.as_bool().ok_or(err_config!(
+            "node {} transit must be true or false",
+            node_id
+        ))?,
+    };
+
     Ok(Node {
         id: node_id.to_string(),
         zpr_address,
         substrate_addrs: None, // filled in later if present
         provider,
+        transit,
     })
 }
 
