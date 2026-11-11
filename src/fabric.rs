@@ -56,6 +56,8 @@ pub struct FabricNode {
     pub zpr_addr: IpAddr,
     pub provider_attrs: Vec<Attribute>, // parsed out of config::Node.provider
     pub substrate_addrs: Option<HashMap<String, SubstrateAddr>>, // substrate addrs parsed out of config::Node.substrate
+    /// May carry traffic between other nodes (`transit = true` in the configuration).
+    pub transit: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +71,9 @@ pub struct FabricLink {
 #[derive(Debug, Clone)]
 pub struct NodeLinkAddr {
     pub zpr_addr: IpAddr,
-    pub substrate: SubstrateAddr,
+    /// `None` when the node has no substrate address in the configuration: it reports its own
+    /// at run time and the policy leaves this end of the link unset (zl-zipline#226).
+    pub substrate: Option<SubstrateAddr>,
 } // NODE "ID" -- for now is ZPR address, SUBSTRATE_ADDR
 
 #[derive(Debug, Clone)]

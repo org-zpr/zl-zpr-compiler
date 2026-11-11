@@ -470,6 +470,19 @@ impl ConfigApi {
             }
             "nodes" => self.get_zpr_nodes(key_path),
             "links" => self.get_zpr_links(key_path),
+            "transit_nodes" => {
+                // transit_nodes -> sorted IDs of the nodes marked `transit = true`
+                // (zl-zipline#226). Empty when no node is transit-capable.
+                let mut ids: Vec<String> = self
+                    .config
+                    .nodes
+                    .values()
+                    .filter(|n| n.transit)
+                    .map(|n| n.id.clone())
+                    .collect();
+                ids.sort();
+                Some(ConfigItem::KeySet(ids))
+            }
             "visa_services" => {
                 if key_path.len() == 1 {
                     // visa_services -> list of visa service IDs
@@ -743,12 +756,13 @@ impl ConfigApi {
         let link_id = key_path[1];
         let link = self.config.links.get(link_id)?;
         if key_path.len() == 2 {
-            // links/<id> -> 4-tuple of (node1, if1, node2, if2)
+            // links/<id> -> 4-tuple of (node1, if1, node2, if2). An empty interface name means
+            // that node has no substrate_addrs and reports its own address (zl-zipline#226).
             return Some(ConfigItem::KeySet(vec![
                 link.peer_a_id.clone(),
-                link.peer_a_interface.clone(),
+                link.peer_a_interface.clone().unwrap_or_default(),
                 link.peer_b_id.clone(),
-                link.peer_b_interface.clone(),
+                link.peer_b_interface.clone().unwrap_or_default(),
             ]));
         }
         let key = key_path[2];
@@ -973,6 +987,81 @@ mod test {
                 assert_eq!(tuple[2], "n1");
                 assert_eq!(tuple[3], "eth0");
             }
+            _ => panic!("expected KeySet"),
+        }
+    }
+
+    #[test]
+    /// A link end whose node has no substrate_addrs appears in the link tuple with an empty
+    /// interface name (zl-zipline#226).
+    fn test_get_zpr_links_by_id_node_without_substrate() {
+        let cfg = r#"
+        [resolver]
+        order = [ "hosts", "dns" ]
+
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["device.zpr.adapter.cn", "n0.zpr.org"]]
+
+        [nodes.n0.substrate_addrs]
+        eth0 = "10.0.0.1:5000"
+
+        [nodes.n1]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["device.zpr.adapter.cn", "n1.zpr.org"]]
+
+        [links.link0]
+        peers = [{node="n0"}, {node="n1"}]
+
+        [visa_service]
+        dock_node = "n0"
+        "#;
+        let ctx = CompilationCtx::default();
+        let api = ConfigApi::new_from_toml_content(cfg, Path::new(""), &ctx).unwrap();
+        match api.get("zpr/links/link0").unwrap() {
+            ConfigItem::KeySet(tuple) => {
+                assert_eq!(tuple, vec!["n0", "eth0", "n1", ""]);
+            }
+            _ => panic!("expected KeySet"),
+        }
+    }
+
+    #[test]
+    /// `zpr/transit_nodes` lists the IDs of nodes with `transit = true`, sorted
+    /// (zl-zipline#226). It is an empty set when no node is transit-capable.
+    fn test_get_zpr_transit_nodes() {
+        let cfg = r#"
+        [resolver]
+        order = [ "hosts", "dns" ]
+
+        [nodes.n1]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["device.zpr.adapter.cn", "n1.zpr.org"]]
+        transit = true
+
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["device.zpr.adapter.cn", "n0.zpr.org"]]
+        transit = true
+
+        [nodes.n2]
+        zpr_address = "fd5a:5052:90de::3"
+        provider = [["device.zpr.adapter.cn", "n2.zpr.org"]]
+
+        [visa_service]
+        dock_node = "n0"
+        "#;
+        let ctx = CompilationCtx::default();
+        let api = ConfigApi::new_from_toml_content(cfg, Path::new(""), &ctx).unwrap();
+        match api.get("zpr/transit_nodes").unwrap() {
+            ConfigItem::KeySet(ids) => assert_eq!(ids, vec!["n0", "n1"]),
+            _ => panic!("expected KeySet"),
+        }
+
+        let api =
+            ConfigApi::new_from_toml_content(links_api_config(), Path::new(""), &ctx).unwrap();
+        match api.get("zpr/transit_nodes").unwrap() {
+            ConfigItem::KeySet(ids) => assert!(ids.is_empty()),
             _ => panic!("expected KeySet"),
         }
     }

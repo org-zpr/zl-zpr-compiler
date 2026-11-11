@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 
 use crate::errors::CompilationError;
+use crate::fabric::SubstrateAddr;
 use crate::protocols::Protocol;
 use crate::ptypes::Signal;
 use zpr::policy_types::{Attribute, PFlags, ServiceType, TrustedService};
@@ -54,17 +55,21 @@ pub trait PolicyWriter {
     /// Emit one shared `TrustedService` metadata record into the policy's `trustedServices` list.
     fn write_trusted_service_record(&mut self, ts: TrustedService);
 
+    /// Emit one topology link. A `None` substrate means that node reports its own substrate
+    /// address at run time; the writer must leave that end unset (zl-zipline#226).
     fn write_link(
         &mut self,
         link_id: &str,
         node_a_zpr_addr: &IpAddr,
-        node_a_substrate_host: &str,
-        node_a_substrate_port: u16,
+        node_a_substrate: Option<&SubstrateAddr>,
         node_b_zpr_addr: &IpAddr,
-        node_b_substrate_host: &str,
-        node_b_substrate_port: u16,
+        node_b_substrate: Option<&SubstrateAddr>,
         link_attrs: &[Attribute],
     );
+
+    /// Emit the ZPR addresses of the transit-capable nodes (`Policy.transitNodes`). An empty
+    /// slice leaves the field unset: no node is transit-capable (zl-zipline#226).
+    fn write_transit_nodes(&mut self, transit_nodes: &[IpAddr]);
 
     fn finalize(self) -> Result<Vec<u8>, CompilationError>;
 }

@@ -108,6 +108,9 @@ pub struct Node {
     pub provider: Vec<(String, String)>,
     pub zpr_address: IpAddr,
     pub substrate_addrs: Option<HashMap<String, Interface>>,
+    /// `transit = true`: the node may carry traffic between other nodes. Defaults to false;
+    /// policy fails closed for nodes not marked (zl-zipline#226).
+    pub transit: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -115,11 +118,13 @@ pub struct Link {
     // ID's map to node ID's.
     pub peer_a_id: String,
 
-    // Interfaces map to Node substrate interface IDs.
-    pub peer_a_interface: String,
+    // Interfaces map to Node substrate interface IDs. `None` when the node has no
+    // substrate_addrs: the node reports its own substrate address at run time and that
+    // end of the policy `Peering` is left unset (zl-zipline#226).
+    pub peer_a_interface: Option<String>,
 
     pub peer_b_id: String,
-    pub peer_b_interface: String,
+    pub peer_b_interface: Option<String>,
 
     // Link always gets 'zpr.cost' attribute at least.
     pub attributes: Vec<(String, String)>,
@@ -361,15 +366,25 @@ impl ConfigParse {
             )?;
 
             if let Some(addr_val) = v.get("substrate_addrs") {
-                if let Some(tbl) = addr_val.as_table() {
-                    let substrate_addrs = parse_substrate_addrs(node_id, tbl, ctx)?;
-                    if !substrate_addrs.is_empty() {
-                        n.substrate_addrs = Some(substrate_addrs);
-                    } else {
-                        ctx.warn(
-                            format!("node {} has empty substrate_addrs section", node_id).as_str(),
-                        )?;
-                    }
+                // A node without substrate addresses reports its own (zl-zipline#226), so a
+                // malformed section must fail rather than be ignored: ignoring it would
+                // silently drop the configured address.
+                let tbl = addr_val.as_table().ok_or(err_config!(
+                    "node {} substrate_addrs must be a table of interface = \"HOST:PORT\"",
+                    node_id
+                ))?;
+                let substrate_addrs = parse_substrate_addrs(node_id, tbl, ctx)?;
+                if !substrate_addrs.is_empty() {
+                    n.substrate_addrs = Some(substrate_addrs);
+                } else {
+                    ctx.warn(
+                        format!(
+                            "node {} has empty substrate_addrs section; treated as no substrate \
+                             address (the node reports its own)",
+                            node_id
+                        )
+                        .as_str(),
+                    )?;
                 }
             }
 
@@ -869,8 +884,8 @@ mod test {
         assert_eq!(l0.peer_a_id, "n0");
         assert_eq!(l0.peer_b_id, "n1");
 
-        assert_eq!(l0.peer_a_interface, "i0".to_string());
-        assert_eq!(l0.peer_b_interface, "j0".to_string());
+        assert_eq!(l0.peer_a_interface, Some("i0".to_string()));
+        assert_eq!(l0.peer_b_interface, Some("j0".to_string()));
 
         assert_eq!(l0.attributes.len(), 1);
         assert_eq!(l0.attributes[0].0, zpl::KATTR_LINK_COST);
@@ -966,8 +981,8 @@ mod test {
         assert_eq!(l0.peer_a_id, "n0");
         assert_eq!(l0.peer_b_id, "n1");
 
-        assert_eq!(l0.peer_a_interface, "i2".to_string());
-        assert_eq!(l0.peer_b_interface, "j1".to_string());
+        assert_eq!(l0.peer_a_interface, Some("i2".to_string()));
+        assert_eq!(l0.peer_b_interface, Some("j1".to_string()));
 
         assert_eq!(l0.attributes.len(), 1);
         assert_eq!(l0.attributes[0].0, zpl::KATTR_LINK_COST);
@@ -1034,6 +1049,147 @@ mod test {
         let l2 = links.get("n0n2").unwrap();
         assert_eq!(l2.peer_a_id, "n0");
         assert_eq!(l2.peer_b_id, "n2");
+    }
+
+    /// Parse nodes and links from `tstr`, returning the links result (zl-zipline#226 tests).
+    fn parse_links_from(tstr: &str) -> Result<HashMap<String, Link>, CompilationError> {
+        let ctx = CompilationCtx::new(false, false);
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let nodes = cparser.parse_nodes(&Resolver::default(), &ctx).unwrap();
+        cparser.parse_links(&ctx, &nodes)
+    }
+
+    #[test]
+    /// A link may name a node without substrate_addrs; that end has no interface, and the node
+    /// reports its own substrate address at run time (zl-zipline#226). Both ends may lack one.
+    fn test_parse_links_node_without_substrate() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        [nodes.n0.substrate_addrs]
+        "i0" = "1.2.3.4:2000"
+
+        [nodes.n1]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["zpr.foo", "baz"]]
+
+        [nodes.n2]
+        zpr_address = "fd5a:5052:90de::3"
+        provider = [["zpr.foo", "qux"]]
+
+        [links.n0n1]
+        peers = [{ node = "n0" }, { node = "n1" }]
+
+        [links.n1n2]
+        peers = [{ node = "n1" }, { node = "n2" }]
+        "#;
+        let links = parse_links_from(tstr).expect("links parse");
+        let l01 = links.get("n0n1").unwrap();
+        assert_eq!(l01.peer_a_interface, Some("i0".to_string()));
+        assert_eq!(l01.peer_b_interface, None);
+        let l12 = links.get("n1n2").unwrap();
+        assert_eq!(l12.peer_a_interface, None);
+        assert_eq!(l12.peer_b_interface, None);
+    }
+
+    #[test]
+    /// Naming an interface on a node that has no substrate_addrs is an error.
+    fn test_parse_links_interface_on_node_without_substrate() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        [nodes.n0.substrate_addrs]
+        "i0" = "1.2.3.4:2000"
+
+        [nodes.n1]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["zpr.foo", "baz"]]
+
+        [links.n0n1]
+        peers = [{ node = "n0" }, { node = "n1", interface = "i0" }]
+        "#;
+        let err = parse_links_from(tstr).unwrap_err().to_string();
+        assert!(
+            err.contains("interface 'i0'") && err.contains("'n1'"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    /// `transit` is an optional boolean on a node; absent means false (zl-zipline#226).
+    fn test_parse_node_transit() {
+        let tstr = r#"
+        [nodes.relay]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        transit = true
+
+        [nodes.laptop]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["zpr.foo", "baz"]]
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let nodes = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap();
+        assert!(nodes.get("relay").unwrap().transit);
+        assert!(!nodes.get("laptop").unwrap().transit);
+    }
+
+    #[test]
+    /// A non-boolean `transit` is an error.
+    fn test_parse_node_transit_not_bool() {
+        let tstr = r#"
+        [nodes.relay]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        transit = "yes"
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let err = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("transit"), "unexpected error: {err}");
+    }
+
+    #[test]
+    /// An empty substrate interface ID is rejected: the empty string is the "no substrate
+    /// address" marker in `zpr/links/<id>`, so a real interface must never use it.
+    fn test_parse_node_empty_interface_id() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        [nodes.n0.substrate_addrs]
+        "" = "10.0.0.1:5000"
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let err = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("empty interface"), "unexpected error: {err}");
+    }
+
+    #[test]
+    /// A `substrate_addrs` that is not a table is an error. Ignoring it would silently turn
+    /// the node into one that reports its own address (zl-zipline#226).
+    fn test_parse_node_substrate_addrs_not_table() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        substrate_addrs = "10.0.0.1:5000"
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let err = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("substrate_addrs"), "unexpected error: {err}");
     }
 
     #[test]
