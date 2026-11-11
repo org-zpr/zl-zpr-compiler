@@ -66,9 +66,10 @@ the node has exactly one substrate address.
 
 `substrate_addrs` is optional. A node without it (for example a laptop that changes networks)
 can still be a link peer: the compiled policy leaves that end of the link without a substrate
-address, and the node reports its own address to the visa service when it connects. Both
-ends of a link may be like this (a direct link between two endpoints). A peer on such a node
-must not name an `interface`.
+address. Both ends of a link may be like this (a direct link between two endpoints). A peer on
+such a node must not name an `interface`. The visa service is meant to fill in the address the
+node reports when it connects; that is not implemented yet (zl-zipline#227), so until then
+such a link end has no substrate address and the link is not usable.
 
 If a node has multiple substrate addresses then reference the substrate address name
 in the peers list, eg:
