@@ -760,6 +760,10 @@ impl Weaver {
         Ok(())
     }
 
+    /// Look up one end of a link: the node's ZPR address and the substrate address of
+    /// interface `if_id`. An empty `if_id` means the node has no substrate address in the
+    /// configuration (it reports its own at run time), so the substrate is `None`
+    /// (zl-zipline#226).
     fn get_node_link_addr(
         &self,
         node_key: &str,
@@ -771,20 +775,25 @@ impl Weaver {
             .ok_or(CompilationError::BuildError(format!(
                 "linked node {node_key} not found in fabric",
             )))?;
-        let if_addr = node
-            .substrate_addrs
-            .as_ref()
-            .ok_or(CompilationError::ConfigError(format!(
-                "node {node_key} is part of a link but has no substrate interfaces defined",
-            )))?
-            .get(if_id)
-            .ok_or(CompilationError::ConfigError(format!(
-                "interface {if_id} not found for linked node {node_key}",
-            )))?;
+        let substrate = if if_id.is_empty() {
+            None
+        } else {
+            let if_addr = node
+                .substrate_addrs
+                .as_ref()
+                .ok_or(CompilationError::ConfigError(format!(
+                    "node {node_key} is part of a link but has no substrate interfaces defined",
+                )))?
+                .get(if_id)
+                .ok_or(CompilationError::ConfigError(format!(
+                    "interface {if_id} not found for linked node {node_key}",
+                )))?;
+            Some(if_addr.clone())
+        };
 
         Ok(NodeLinkAddr {
             zpr_addr: node.zpr_addr.clone(),
-            substrate: if_addr.clone(),
+            substrate,
         })
     }
 
@@ -1768,10 +1777,10 @@ mod test {
         let mut w = Weaver::new(WeavingContext::default());
         let addr = |last: u16| NodeLinkAddr {
             zpr_addr: format!("fd5a:5052:90de::{last}").parse().unwrap(),
-            substrate: SubstrateAddr {
+            substrate: Some(SubstrateAddr {
                 host: "127.0.0.1".to_string(),
                 port: 5000 + last,
-            },
+            }),
         };
         w.fabric.push_link(FabricLink {
             link_id: "n0n1".to_string(),

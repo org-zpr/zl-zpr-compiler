@@ -69,7 +69,9 @@ pub struct FabricLink {
 #[derive(Debug, Clone)]
 pub struct NodeLinkAddr {
     pub zpr_addr: IpAddr,
-    pub substrate: SubstrateAddr,
+    /// `None` when the node has no substrate address in the configuration: it reports its own
+    /// at run time and the policy leaves this end of the link unset (zl-zipline#226).
+    pub substrate: Option<SubstrateAddr>,
 } // NODE "ID" -- for now is ZPR address, SUBSTRATE_ADDR
 
 #[derive(Debug, Clone)]

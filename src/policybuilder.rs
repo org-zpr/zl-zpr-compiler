@@ -218,11 +218,9 @@ impl<T: PolicyWriter> PolicyBuilder<T> {
             self.policy_writer.write_link(
                 &link.link_id,
                 &link.node_a.zpr_addr,
-                &link.node_a.substrate.host,
-                link.node_a.substrate.port,
+                link.node_a.substrate.as_ref(),
                 &link.node_b.zpr_addr,
-                &link.node_b.substrate.host,
-                link.node_b.substrate.port,
+                link.node_b.substrate.as_ref(),
                 &link.link_attrs,
             );
         }

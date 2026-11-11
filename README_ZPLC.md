@@ -17,7 +17,7 @@ Suggest layout within the TOML file:
 
 ## Nodes
 
-Only one node is supported currently in a ZPRnet.  Syntax:
+A ZPRnet has one or more nodes.  Syntax:
 
 ```toml
 [nodes.<NODEID>]
@@ -33,9 +33,9 @@ same address.
 
 ### Topology
 
-If there are multiple nodes you need to define their substrate addresses. We support multiple
-substrate addresses per node. Each address is specified in `HOST:PORT` format and is tied
-to an identifier.  In the example below the identifier is `i0`.
+A node may declare its substrate addresses. We support multiple substrate addresses per
+node. Each address is specified in `HOST:PORT` format and is tied to an identifier.  In the
+example below the identifier is `i0`.
 
 
 ```toml
@@ -47,14 +47,23 @@ provider = [[]]
 i0 = "10.0.0.1:5000"
 ```
 
-To connect nodes you must specific `links` in the zplc file.
+To connect nodes you must specify `links` in the zplc file.
 
 ```toml
 [links.<LINKID>]
 attributes = [["zpr.cost", "1"]] # this is the default
 peers = [ { node = "<NODEID>" },
-          { node = "<NODEID>" } ]
+          { node = "<NODEID>", interface = "<IFID>" } ]
 ```
+
+* `interface` - Which of the node's `substrate_addrs` the link uses. It may be omitted when
+the node has exactly one substrate address.
+
+`substrate_addrs` is optional. A node without it (for example a laptop that changes networks)
+can still be a link peer: the compiled policy leaves that end of the link without a substrate
+address, and the node reports its own address to the visa service when it connects. Both
+ends of a link may be like this (a direct link between two endpoints). A peer on such a node
+must not name an `interface`.
 
 If a node has multiple substrate addresses then reference the substrate address name
 in the peers list, eg:

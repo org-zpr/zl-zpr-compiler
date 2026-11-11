@@ -1,0 +1,42 @@
+[nodes.n0]
+provider = [["device.zpr.adapter.cn", "node0.zpr.org"]]
+zpr_address = "fd5a:5052:90de::1"
+
+[nodes.n0.substrate_addrs]
+i0 = "10.0.0.1:5000"
+
+# n1 and n2 have no substrate_addrs: each reports its own address at run time.
+[nodes.n1]
+provider = [["device.zpr.adapter.cn", "node1.zpr.org"]]
+zpr_address = "fd5a:5052:90de::2"
+
+[nodes.n2]
+provider = [["device.zpr.adapter.cn", "node2.zpr.org"]]
+zpr_address = "fd5a:5052:90de::3"
+
+# n1 has no substrate_addrs, so naming an interface on it is an error.
+[links.n0n1]
+peers = [{node="n0"}, {node="n1", interface="i0"}]
+
+[trusted_services.attrs]
+api = "file"
+returns_attributes = [ "color -> user.color", "content -> service.content", "uid -> user.uid" ]
+
+[bootstrap]
+"node0.zpr.org" = "rsa-pub-key.pem"
+"node1.zpr.org" = "rsa-pub-key.pem"
+"node2.zpr.org" = "rsa-pub-key.pem"
+
+
+[protocols.http]
+l4protocol = "TCP"
+port = 80
+
+[services.server]
+protocol = "http"
+
+[services.WebService]
+protocol = "http"
+
+[services.FooService]
+protocol = "http"

@@ -1817,3 +1817,60 @@ fn test_single_valued_requirements_still_conflict() {
         );
     }
 }
+
+// ---- zl-zipline#226: links to nodes without a substrate address ----
+
+/// Decode the topology of a compiled policy into
+/// `(link_id, node_a substrate as "host:port" or None, node_b substrate likewise)`.
+fn topology_substrates(pbytes: &[u8]) -> Vec<(String, Option<String>, Option<String>)> {
+    let rdr = capnp::serialize::read_message(
+        &mut Cursor::new(pbytes),
+        capnp::message::ReaderOptions::new(),
+    )
+    .expect("decode policy");
+    let policy = rdr
+        .get_root::<policy_capnp::policy::Reader>()
+        .expect("policy root");
+    let fmt = |a: Option<zpr::policy_types::NetAddr>| a.map(|a| format!("{}:{}", a.host, a.port));
+    let mut out: Vec<(String, Option<String>, Option<String>)> = policy
+        .get_topology()
+        .unwrap()
+        .iter()
+        .map(|p| {
+            let peering = zpr::policy_types::Peering::try_from(p).expect("decode peering");
+            (
+                peering.link_id,
+                fmt(peering.substrate_a),
+                fmt(peering.substrate_b),
+            )
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+#[test]
+/// A link end whose node has no substrate_addrs is written unset (never an empty host or
+/// port 0), and the configured end keeps its address. Both ends may be unset.
+fn test_topology_with_reported_substrate() {
+    let temp = TempDir::new("topo-reported");
+    let pbytes = compile_policy_bytes("test-topo-reported", &temp);
+    assert_eq!(
+        topology_substrates(&pbytes),
+        vec![
+            ("n0n1".to_string(), Some("10.0.0.1:5000".to_string()), None),
+            ("n1n2".to_string(), None, None),
+        ]
+    );
+}
+
+#[test]
+/// Naming an interface on a node that has no substrate_addrs is a configuration error.
+fn test_link_interface_on_node_without_substrate_is_rejected() {
+    let temp = TempDir::new("bad-link-iface-no-substrate");
+    let msg = compile_expect_err("bad-link-interface-no-substrate", &temp);
+    assert!(
+        msg.contains("n1") && msg.contains("i0"),
+        "unexpected error: {msg}"
+    );
+}

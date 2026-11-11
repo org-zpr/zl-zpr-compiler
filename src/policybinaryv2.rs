@@ -6,6 +6,7 @@ use zpr::write_to::WriteTo;
 
 use crate::compiler::get_compiler_version;
 use crate::errors::CompilationError;
+use crate::fabric::SubstrateAddr;
 use crate::policywriter::{PolicyContainer, PolicyWriter};
 use crate::protocols::{IcmpFlowType, PortSpec, Protocol, ProtocolDetails};
 use crate::ptypes::Signal;
@@ -228,6 +229,11 @@ impl PolicyContainer for PolicyContainerV2 {
 
 // Note that this is only partically implemented to support the small amount of
 // V2 functionality we need right now.
+/// Convert a configured substrate address to the policy `NetAddr` (IP or hostname).
+fn to_net_addr(addr: &SubstrateAddr) -> NetAddr {
+    NetAddr::new_for_ip_or_host(&addr.host, addr.port)
+}
+
 impl PolicyWriter for PolicyBinaryV2 {
     fn write_created_timestamp(&mut self, timestamp: &str) {
         self.created_timestamp = timestamp.to_string();
@@ -328,11 +334,9 @@ impl PolicyWriter for PolicyBinaryV2 {
         &mut self,
         link_id: &str,
         node_a_zpr_addr: &IpAddr,
-        node_a_substrate_host: &str,
-        node_a_substrate_port: u16,
+        node_a_substrate: Option<&SubstrateAddr>,
         node_b_zpr_addr: &IpAddr,
-        node_b_substrate_host: &str,
-        node_b_substrate_port: u16,
+        node_b_substrate: Option<&SubstrateAddr>,
         link_attrs: &[Attribute],
     ) {
         let mut attrs = Vec::new();
@@ -356,17 +360,11 @@ impl PolicyWriter for PolicyBinaryV2 {
         let peering = Peering {
             link_id: link_id.to_string(),
             node_a: *node_a_zpr_addr,
-            // The compiler always writes both ends today; leaving one unset (the node
-            // reports its own address, zl-zipline#225) is zl-zipline#226.
-            substrate_a: Some(NetAddr::new_for_ip_or_host(
-                node_a_substrate_host,
-                node_a_substrate_port,
-            )),
+            // `None` leaves the end unset: that node reports its own substrate address
+            // (zl-zipline#225/#226). Never written as an empty host or port 0.
+            substrate_a: node_a_substrate.map(to_net_addr),
             node_b: *node_b_zpr_addr,
-            substrate_b: Some(NetAddr::new_for_ip_or_host(
-                node_b_substrate_host,
-                node_b_substrate_port,
-            )),
+            substrate_b: node_b_substrate.map(to_net_addr),
             attributes: attrs,
         };
 

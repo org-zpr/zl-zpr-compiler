@@ -138,60 +138,7 @@ pub(super) fn parse_link(
         }
         let refnode = refnode.unwrap();
 
-        if refnode.substrate_addrs.is_none() {
-            return Err(err_config!(
-                "link {} peer {} references node '{}' with no substrate_addrs",
-                link_id,
-                i,
-                node_id
-            ));
-        }
-
-        let interface = if peer_tbl.contains_key("interface") {
-            let iname = peer_tbl["interface"]
-                .as_str()
-                .ok_or(err_config!(
-                    "link {} peer {} interface should be a string",
-                    link_id,
-                    i
-                ))?
-                .to_string();
-            // Interface name must exist on node.
-            if !refnode
-                .substrate_addrs
-                .as_ref()
-                .unwrap()
-                .contains_key(&iname)
-            {
-                return Err(err_config!(
-                    "link {} peer {} references interface '{}' which does not exist on node '{}'",
-                    link_id,
-                    i,
-                    iname,
-                    node_id
-                ));
-            }
-            Some(iname)
-        } else {
-            // Interface can be omitted if node has single substreate address.
-            if refnode.substrate_addrs.as_ref().unwrap().len() == 1 {
-                // Just take the single interface.
-                refnode
-                    .substrate_addrs
-                    .as_ref()
-                    .unwrap()
-                    .keys()
-                    .next()
-                    .cloned()
-            } else {
-                return Err(err_config!(
-                    "link {} peer {} missing interface and node '{}' has multiple substrate_addrs",
-                    link_id,
-                    i,
-                    node_id
-                ));
-            }
-        };
+        let interface = resolve_peer_interface(link_id, i, &node_id, refnode, peer_tbl)?;
 
         if i == 0 {
             peer_a_id = Some(node_id);
@@ -210,11 +157,71 @@ pub(super) fn parse_link(
 
     Ok(Link {
         peer_a_id: peer_a_id.unwrap(),
-        peer_a_interface: peer_a_interface.unwrap(),
+        peer_a_interface,
         peer_b_id: peer_b_id.unwrap(),
-        peer_b_interface: peer_b_interface.unwrap(),
+        peer_b_interface,
         attributes: attrs,
     })
+}
+
+/// Work out which substrate interface of `refnode` a link peer uses.
+///
+/// - The node has no substrate_addrs: `None`. The node reports its own substrate address at
+///   run time and the policy leaves that end of the link unset (zl-zipline#226). Naming an
+///   interface on such a node is an error, because the interface cannot exist.
+/// - The peer names an `interface`: it must exist on the node.
+/// - The peer names none: the node must have exactly one interface, which is used.
+fn resolve_peer_interface(
+    link_id: &str,
+    peer_idx: usize,
+    node_id: &str,
+    refnode: &Node,
+    peer_tbl: &Table,
+) -> Result<Option<String>, CompilationError> {
+    let named = match peer_tbl.get("interface") {
+        Some(v) => Some(
+            v.as_str()
+                .ok_or(err_config!(
+                    "link {} peer {} interface should be a string",
+                    link_id,
+                    peer_idx
+                ))?
+                .to_string(),
+        ),
+        None => None,
+    };
+
+    let Some(ifaces) = refnode.substrate_addrs.as_ref() else {
+        return match named {
+            Some(iname) => Err(err_config!(
+                "link {} peer {} references interface '{}' but node '{}' has no substrate_addrs",
+                link_id,
+                peer_idx,
+                iname,
+                node_id
+            )),
+            None => Ok(None),
+        };
+    };
+
+    match named {
+        Some(iname) if ifaces.contains_key(&iname) => Ok(Some(iname)),
+        Some(iname) => Err(err_config!(
+            "link {} peer {} references interface '{}' which does not exist on node '{}'",
+            link_id,
+            peer_idx,
+            iname,
+            node_id
+        )),
+        // Interface can be omitted if the node has a single substrate address.
+        None if ifaces.len() == 1 => Ok(ifaces.keys().next().cloned()),
+        None => Err(err_config!(
+            "link {} peer {} missing interface and node '{}' has multiple substrate_addrs",
+            link_id,
+            peer_idx,
+            node_id
+        )),
+    }
 }
 
 /// Parse a node substrate addrs table.

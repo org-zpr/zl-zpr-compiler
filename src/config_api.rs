@@ -743,12 +743,13 @@ impl ConfigApi {
         let link_id = key_path[1];
         let link = self.config.links.get(link_id)?;
         if key_path.len() == 2 {
-            // links/<id> -> 4-tuple of (node1, if1, node2, if2)
+            // links/<id> -> 4-tuple of (node1, if1, node2, if2). An empty interface name means
+            // that node has no substrate_addrs and reports its own address (zl-zipline#226).
             return Some(ConfigItem::KeySet(vec![
                 link.peer_a_id.clone(),
-                link.peer_a_interface.clone(),
+                link.peer_a_interface.clone().unwrap_or_default(),
                 link.peer_b_id.clone(),
-                link.peer_b_interface.clone(),
+                link.peer_b_interface.clone().unwrap_or_default(),
             ]));
         }
         let key = key_path[2];
@@ -972,6 +973,41 @@ mod test {
                 assert_eq!(tuple[1], "eth0");
                 assert_eq!(tuple[2], "n1");
                 assert_eq!(tuple[3], "eth0");
+            }
+            _ => panic!("expected KeySet"),
+        }
+    }
+
+    #[test]
+    /// A link end whose node has no substrate_addrs appears in the link tuple with an empty
+    /// interface name (zl-zipline#226).
+    fn test_get_zpr_links_by_id_node_without_substrate() {
+        let cfg = r#"
+        [resolver]
+        order = [ "hosts", "dns" ]
+
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["device.zpr.adapter.cn", "n0.zpr.org"]]
+
+        [nodes.n0.substrate_addrs]
+        eth0 = "10.0.0.1:5000"
+
+        [nodes.n1]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["device.zpr.adapter.cn", "n1.zpr.org"]]
+
+        [links.link0]
+        peers = [{node="n0"}, {node="n1"}]
+
+        [visa_service]
+        dock_node = "n0"
+        "#;
+        let ctx = CompilationCtx::default();
+        let api = ConfigApi::new_from_toml_content(cfg, Path::new(""), &ctx).unwrap();
+        match api.get("zpr/links/link0").unwrap() {
+            ConfigItem::KeySet(tuple) => {
+                assert_eq!(tuple, vec!["n0", "eth0", "n1", ""]);
             }
             _ => panic!("expected KeySet"),
         }

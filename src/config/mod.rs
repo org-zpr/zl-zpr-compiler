@@ -115,11 +115,13 @@ pub struct Link {
     // ID's map to node ID's.
     pub peer_a_id: String,
 
-    // Interfaces map to Node substrate interface IDs.
-    pub peer_a_interface: String,
+    // Interfaces map to Node substrate interface IDs. `None` when the node has no
+    // substrate_addrs: the node reports its own substrate address at run time and that
+    // end of the policy `Peering` is left unset (zl-zipline#226).
+    pub peer_a_interface: Option<String>,
 
     pub peer_b_id: String,
-    pub peer_b_interface: String,
+    pub peer_b_interface: Option<String>,
 
     // Link always gets 'zpr.cost' attribute at least.
     pub attributes: Vec<(String, String)>,
@@ -869,8 +871,8 @@ mod test {
         assert_eq!(l0.peer_a_id, "n0");
         assert_eq!(l0.peer_b_id, "n1");
 
-        assert_eq!(l0.peer_a_interface, "i0".to_string());
-        assert_eq!(l0.peer_b_interface, "j0".to_string());
+        assert_eq!(l0.peer_a_interface, Some("i0".to_string()));
+        assert_eq!(l0.peer_b_interface, Some("j0".to_string()));
 
         assert_eq!(l0.attributes.len(), 1);
         assert_eq!(l0.attributes[0].0, zpl::KATTR_LINK_COST);
@@ -966,8 +968,8 @@ mod test {
         assert_eq!(l0.peer_a_id, "n0");
         assert_eq!(l0.peer_b_id, "n1");
 
-        assert_eq!(l0.peer_a_interface, "i2".to_string());
-        assert_eq!(l0.peer_b_interface, "j1".to_string());
+        assert_eq!(l0.peer_a_interface, Some("i2".to_string()));
+        assert_eq!(l0.peer_b_interface, Some("j1".to_string()));
 
         assert_eq!(l0.attributes.len(), 1);
         assert_eq!(l0.attributes[0].0, zpl::KATTR_LINK_COST);
@@ -1034,6 +1036,72 @@ mod test {
         let l2 = links.get("n0n2").unwrap();
         assert_eq!(l2.peer_a_id, "n0");
         assert_eq!(l2.peer_b_id, "n2");
+    }
+
+    /// Parse nodes and links from `tstr`, returning the links result (zl-zipline#226 tests).
+    fn parse_links_from(tstr: &str) -> Result<HashMap<String, Link>, CompilationError> {
+        let ctx = CompilationCtx::new(false, false);
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let nodes = cparser.parse_nodes(&Resolver::default(), &ctx).unwrap();
+        cparser.parse_links(&ctx, &nodes)
+    }
+
+    #[test]
+    /// A link may name a node without substrate_addrs; that end has no interface, and the node
+    /// reports its own substrate address at run time (zl-zipline#226). Both ends may lack one.
+    fn test_parse_links_node_without_substrate() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        [nodes.n0.substrate_addrs]
+        "i0" = "1.2.3.4:2000"
+
+        [nodes.n1]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["zpr.foo", "baz"]]
+
+        [nodes.n2]
+        zpr_address = "fd5a:5052:90de::3"
+        provider = [["zpr.foo", "qux"]]
+
+        [links.n0n1]
+        peers = [{ node = "n0" }, { node = "n1" }]
+
+        [links.n1n2]
+        peers = [{ node = "n1" }, { node = "n2" }]
+        "#;
+        let links = parse_links_from(tstr).expect("links parse");
+        let l01 = links.get("n0n1").unwrap();
+        assert_eq!(l01.peer_a_interface, Some("i0".to_string()));
+        assert_eq!(l01.peer_b_interface, None);
+        let l12 = links.get("n1n2").unwrap();
+        assert_eq!(l12.peer_a_interface, None);
+        assert_eq!(l12.peer_b_interface, None);
+    }
+
+    #[test]
+    /// Naming an interface on a node that has no substrate_addrs is an error.
+    fn test_parse_links_interface_on_node_without_substrate() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        [nodes.n0.substrate_addrs]
+        "i0" = "1.2.3.4:2000"
+
+        [nodes.n1]
+        zpr_address = "fd5a:5052:90de::2"
+        provider = [["zpr.foo", "baz"]]
+
+        [links.n0n1]
+        peers = [{ node = "n0" }, { node = "n1", interface = "i0" }]
+        "#;
+        let err = parse_links_from(tstr).unwrap_err().to_string();
+        assert!(
+            err.contains("interface 'i0'") && err.contains("'n1'"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
