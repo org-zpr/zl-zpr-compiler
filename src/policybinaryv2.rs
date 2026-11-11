@@ -356,9 +356,17 @@ impl PolicyWriter for PolicyBinaryV2 {
         let peering = Peering {
             link_id: link_id.to_string(),
             node_a: *node_a_zpr_addr,
-            substrate_a: NetAddr::new_for_ip_or_host(node_a_substrate_host, node_a_substrate_port),
+            // The compiler always writes both ends today; leaving one unset (the node
+            // reports its own address, zl-zipline#225) is zl-zipline#226.
+            substrate_a: Some(NetAddr::new_for_ip_or_host(
+                node_a_substrate_host,
+                node_a_substrate_port,
+            )),
             node_b: *node_b_zpr_addr,
-            substrate_b: NetAddr::new_for_ip_or_host(node_b_substrate_host, node_b_substrate_port),
+            substrate_b: Some(NetAddr::new_for_ip_or_host(
+                node_b_substrate_host,
+                node_b_substrate_port,
+            )),
             attributes: attrs,
         };
 
