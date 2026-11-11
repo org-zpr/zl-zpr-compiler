@@ -1146,6 +1146,25 @@ mod test {
     }
 
     #[test]
+    /// An empty substrate interface ID is rejected: the empty string is the "no substrate
+    /// address" marker in `zpr/links/<id>`, so a real interface must never use it.
+    fn test_parse_node_empty_interface_id() {
+        let tstr = r#"
+        [nodes.n0]
+        zpr_address = "fd5a:5052:90de::1"
+        provider = [["zpr.foo", "bar"]]
+        [nodes.n0.substrate_addrs]
+        "" = "10.0.0.1:5000"
+        "#;
+        let cparser = ConfigParse::new_from_toml_str(tstr).unwrap();
+        let err = cparser
+            .parse_nodes(&Resolver::default(), &CompilationCtx::new(false, false))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("empty interface"), "unexpected error: {err}");
+    }
+
+    #[test]
     fn test_parse_node_reserved_id() {
         let tstr = r#"
         [nodes]

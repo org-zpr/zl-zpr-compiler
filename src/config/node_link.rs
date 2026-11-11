@@ -243,6 +243,14 @@ pub(super) fn parse_substrate_addrs(
 ) -> Result<HashMap<String, Interface>, CompilationError> {
     let mut substrate_addrs = HashMap::new();
     for (ifname, v) in addrs {
+        // The empty string marks "no substrate address" in the `zpr/links/<id>` tuple
+        // (zl-zipline#226), so an interface may not use it as its ID.
+        if ifname.is_empty() {
+            return Err(err_config!(
+                "node {} substrate_addrs has an empty interface ID",
+                node_id
+            ));
+        }
         let iface = parse_interface(
             ifname,
             v.as_str().ok_or(err_config!(
