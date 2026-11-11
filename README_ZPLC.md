@@ -32,9 +32,11 @@ the nodes Noise certificate.
 same address.
 * `transit` - Optional, `true` or `false` (default `false`). A transit-capable node may carry
 traffic between other nodes, e.g. a relay. The compiler lists the ZPR address of every
-transit node in the policy (`transitNodes`). The policy fails closed: a node that is not
-marked `transit = true` never carries other nodes' traffic, and with no transit node at all
-every path must be a single hop.
+transit node in the policy (`transitNodes`). The list is meant to fail closed: a node that
+is not marked `transit = true` never carries other nodes' traffic, and with no transit node
+at all every path is a single hop. The visa service does not enforce this yet
+(zl-zipline#227); until then it may route through any node, and only a node's own
+`forwarding` setting stops it carrying other nodes' traffic.
 
 ### Topology
 
