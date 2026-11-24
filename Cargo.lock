@@ -1431,8 +1431,8 @@ dependencies = [
 
 [[package]]
 name = "zpr"
-version = "0.32.0-zodes.6"
-source = "git+https://github.com/org-zpr/zl-zpr-common.git?tag=zl-v0.32.0-zodes.6#9bf6fba7027d062aae40f8f4b1ddaaa319fe1fb3"
+version = "0.32.0"
+source = "git+https://github.com/org-zpr/zl-zpr-common.git?tag=zl-v0.32.0#bf335f75a1e5c33691a465d8ecdfc51856e43c18"
 dependencies = [
  "base64",
  "bytes",
