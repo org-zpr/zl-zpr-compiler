@@ -4,7 +4,7 @@ use openssl::rsa::Rsa;
 use std::convert::TryInto;
 
 use zpr::policy::v1 as policy_capnp;
-use zpr::policy_types::{AttrExp, AttrOp, Peering, TrustedService};
+use zpr::policy_types::{AttrExp, AttrOp, NetAddr, Peering, TrustedService};
 
 use crate::compiler::get_compiler_version;
 use crate::dump;
@@ -244,11 +244,13 @@ pub fn dump_v2(fname: &str, encoded_buf: Bytes) {
                     peering.node_b.to_string().yellow()
                 );
                 println!(
-                    "            {}:{} <-> {}:{}",
-                    peering.substrate_a.host.to_string().yellow().dimmed(),
-                    peering.substrate_a.port.to_string().yellow().dimmed(),
-                    peering.substrate_b.host.to_string().yellow().dimmed(),
-                    peering.substrate_b.port.to_string().yellow().dimmed()
+                    "            {} <-> {}",
+                    substrate_label(peering.substrate_a.as_ref())
+                        .yellow()
+                        .dimmed(),
+                    substrate_label(peering.substrate_b.as_ref())
+                        .yellow()
+                        .dimmed()
                 );
                 for attr in &peering.attributes {
                     println!(
@@ -507,4 +509,26 @@ fn attr_exp_to_string(exp: &AttrExp) -> String {
         s.push_str("(no value)")
     }
     s
+}
+
+/// Format one end of a peering for the dump: `host:port`, or `reported` when policy
+/// gives no substrate address and the node reports its own (zl-zipline#225).
+fn substrate_label(addr: Option<&NetAddr>) -> String {
+    match addr {
+        Some(a) => format!("{}:{}", a.host, a.port),
+        None => "reported".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod substrate_label_tests {
+    use super::*;
+
+    #[test]
+    /// A substrate address prints as host:port; an unset one prints as "reported".
+    fn test_substrate_label() {
+        let addr = NetAddr::new_for_ip_or_host("10.0.0.1", 5000);
+        assert_eq!(substrate_label(Some(&addr)), "10.0.0.1:5000");
+        assert_eq!(substrate_label(None), "reported");
+    }
 }

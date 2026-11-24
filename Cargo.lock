@@ -1408,7 +1408,7 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zplc"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "base64",
  "bytes",
@@ -1431,8 +1431,8 @@ dependencies = [
 
 [[package]]
 name = "zpr"
-version = "0.31.2"
-source = "git+https://github.com/org-zpr/zl-zpr-common.git?tag=zl-v0.31.2#07252e8edd6cc1f5e11f2977d6d11ada16977f16"
+version = "0.32.0"
+source = "git+https://github.com/org-zpr/zl-zpr-common.git?tag=zl-v0.32.0#bf335f75a1e5c33691a465d8ecdfc51856e43c18"
 dependencies = [
  "base64",
  "bytes",

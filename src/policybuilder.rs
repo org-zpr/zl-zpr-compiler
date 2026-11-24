@@ -3,6 +3,7 @@
 use chrono::prelude::*;
 use std::collections::HashMap;
 use std::env;
+use std::net::IpAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::context::CompilationCtx;
@@ -106,6 +107,7 @@ impl<T: PolicyWriter> PolicyBuilder<T> {
         self.set_connects(fabric)?;
         self.set_policies(fabric)?;
         self.set_topology(fabric)?;
+        self.set_transit_nodes(fabric);
         self.set_default_auth(fabric, ctx)?;
         self.set_bootstrap(fabric, ctx)?;
         self.set_trusted_service_records(fabric, ctx)?;
@@ -218,15 +220,26 @@ impl<T: PolicyWriter> PolicyBuilder<T> {
             self.policy_writer.write_link(
                 &link.link_id,
                 &link.node_a.zpr_addr,
-                &link.node_a.substrate.host,
-                link.node_a.substrate.port,
+                link.node_a.substrate.as_ref(),
                 &link.node_b.zpr_addr,
-                &link.node_b.substrate.host,
-                link.node_b.substrate.port,
+                link.node_b.substrate.as_ref(),
                 &link.link_attrs,
             );
         }
         Ok(())
+    }
+
+    /// Write the ZPR addresses of the transit-capable nodes, sorted so the output is
+    /// deterministic.
+    fn set_transit_nodes(&mut self, fabric: &Fabric) {
+        let mut addrs: Vec<IpAddr> = fabric
+            .nodes
+            .iter()
+            .filter(|n| n.transit)
+            .map(|n| n.zpr_addr)
+            .collect();
+        addrs.sort();
+        self.policy_writer.write_transit_nodes(&addrs);
     }
 
     fn set_connects(&mut self, fabric: &Fabric) -> Result<(), CompilationError> {

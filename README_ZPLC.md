@@ -17,7 +17,7 @@ Suggest layout within the TOML file:
 
 ## Nodes
 
-Only one node is supported currently in a ZPRnet.  Syntax:
+A ZPRnet has one or more nodes.  Syntax:
 
 ```toml
 [nodes.<NODEID>]
@@ -30,12 +30,19 @@ only attribute you can use here is `device.zpr.adapter.cn` which is the `CN` val
 the nodes Noise certificate.
 * `zpr_address` - IPv6 ZPRnet address for the node. Node must be preconfigured with this
 same address.
+* `transit` - Optional, `true` or `false` (default `false`). A transit-capable node may carry
+traffic between other nodes, e.g. a relay. The compiler lists the ZPR address of every
+transit node in the policy (`transitNodes`). The list is meant to fail closed: a node that
+is not marked `transit = true` never carries other nodes' traffic, and with no transit node
+at all every path is a single hop. The visa service does not enforce this yet
+(zl-zipline#227); until then it may route through any node, and only a node's own
+`forwarding` setting stops it carrying other nodes' traffic.
 
 ### Topology
 
-If there are multiple nodes you need to define their substrate addresses. We support multiple
-substrate addresses per node. Each address is specified in `HOST:PORT` format and is tied
-to an identifier.  In the example below the identifier is `i0`.
+A node may declare its substrate addresses. We support multiple substrate addresses per
+node. Each address is specified in `HOST:PORT` format and is tied to an identifier.  In the
+example below the identifier is `i0`.
 
 
 ```toml
@@ -47,14 +54,24 @@ provider = [[]]
 i0 = "10.0.0.1:5000"
 ```
 
-To connect nodes you must specific `links` in the zplc file.
+To connect nodes you must specify `links` in the zplc file.
 
 ```toml
 [links.<LINKID>]
 attributes = [["zpr.cost", "1"]] # this is the default
 peers = [ { node = "<NODEID>" },
-          { node = "<NODEID>" } ]
+          { node = "<NODEID>", interface = "<IFID>" } ]
 ```
+
+* `interface` - Which of the node's `substrate_addrs` the link uses. It may be omitted when
+the node has exactly one substrate address.
+
+`substrate_addrs` is optional. A node without it (for example a laptop that changes networks)
+can still be a link peer: the compiled policy leaves that end of the link without a substrate
+address. Both ends of a link may be like this (a direct link between two endpoints). A peer on
+such a node must not name an `interface`. The visa service is meant to fill in the address the
+node reports when it connects; that is not implemented yet (zl-zipline#227), so until then
+such a link end has no substrate address and the link is not usable.
 
 If a node has multiple substrate addresses then reference the substrate address name
 in the peers list, eg:
